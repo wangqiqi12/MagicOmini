@@ -1,0 +1,5 @@
+checkpoint path:
+
+$ROOT_HOME/Resources/34/HuggingFaceRepos/black-forest-labs
+
+/ssd/zhenlianghe/Resources/34/HuggingFaceRepos/black-forest-labs/FLUX.1-dev
