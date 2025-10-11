@@ -1,4 +1,4 @@
-# NOTE: inference of our 512*512 new-type(sketch or lineart) data
+# NOTE: inference of our new-type(sketch or lineart) data
 import os
 import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,28 +14,30 @@ from PIL import Image
 from omini.pipeline.flux_omini import Condition, generate, seed_everything
 
 
-def infer_1_example(pipe, gt_image_path, cond_image_path, image_prompt, adapter_name):
+def infer_1_example(pipe, gt_image_path, cond_image_path, image_prompt, adapter_name, img_size):
 
-    image = Image.open(gt_image_path)
-    cond_image = Image.open(cond_image_path).convert("RGB").resize((512, 512))
+    # image = Image.open(gt_image_path)
+    cond_image = Image.open(cond_image_path).convert("RGB").resize((img_size, img_size))
     condition = Condition(cond_image, adapter_name)
-
+    pipe.set_adapters(adapter_name)
     seed_everything()
     result_img = generate(
         pipe,
         prompt=image_prompt,
         conditions=[condition],
+        width=img_size,
+        height=img_size,
     ).images[0]
 
-    concat_image = Image.new("RGB", (1536, 512))
-    concat_image.paste(image, (0, 0))
-    concat_image.paste(condition.condition, (512, 0))
-    concat_image.paste(result_img, (1024, 0))
+    concat_image = Image.new("RGB", (img_size*2, img_size))
+    # concat_image.paste(image, (0, 0))
+    concat_image.paste(condition.condition, (0, 0))
+    concat_image.paste(result_img, (img_size*1, 0))
     # concat_image
 
-    output_dir = "infer_pipeline_output"
+    output_dir = "test_bug_output"
     os.makedirs(output_dir, exist_ok=True)
-    concat_image.save(f"{output_dir}/concat_image_1_example.jpg")
+    concat_image.save(f"{output_dir}/concat_image_jpg_22_512_2.jpg")
 
     pass
 
@@ -51,7 +53,7 @@ def sample_json_ids(folder_path, sample_size=5):
 
 
 
-def infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jsons_dir, num_imgs, adapter_names, task):
+def infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jsons_dir, num_imgs, adapter_names, task, img_size):
     # sample 
     gt_image_dir = Path(gt_image_dir)
     cond_image_dir = Path(cond_image_dir)
@@ -69,7 +71,7 @@ def infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jso
             image_prompt = data.get("prompt", "")
         
         image = Image.open(gt_image_path)
-        cond_image = Image.open(cond_image_path).convert("RGB").resize((512, 512))
+        cond_image = Image.open(cond_image_path).convert("RGB").resize((img_size, img_size))
         
 
         N_loras = len(adapter_names)
@@ -84,21 +86,27 @@ def infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jso
                 pipe,
                 prompt=image_prompt,
                 conditions=[condition],
+                width=img_size,
+                height=img_size,
             ).images[0]
             results.append(result_img)
 
         # concat images
         assert len(results) == N_loras
 
-        concat_image = Image.new("RGB", (512 * (N_loras + 2), 512))
+        # print("saving result imgs")
+        # results[0].save("test_output.jpg")
+        # import ipdb;ipdb.set_trace();
+
+        concat_image = Image.new("RGB", (img_size * (N_loras + 2), img_size))
         concat_image.paste(image, (0, 0))
-        concat_image.paste(condition.condition, (512, 0))
+        concat_image.paste(condition.condition, (img_size, 0))
         
         for idx, result_img in enumerate(results):
-            concat_image.paste(result_img, (1024 + idx * 512, 0))
+            concat_image.paste(result_img, (img_size * 2 + idx * img_size, 0))
         # concat_image
 
-        output_dir = f"{task}_output"
+        output_dir = f"{task}_{img_size}_output"
         os.makedirs(output_dir, exist_ok=True)
         concat_image.save(f"{output_dir}/concat_image_{id}.jpg")
           
@@ -108,18 +116,22 @@ def main():
     
     # NOTE: change task, change to local checkpoint path
     task = "sketch" 
-    FLUX_local_path = "/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_ckpts/FLUX_ckpts/FLUX.1-dev"
-    lora_local_dir = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/OminiControl/runs/tot_bs8_1GPU_{task}/ckpt"
+    FLUX_local_path = "/root/private_data/wangqiqi/Omini_ckpts/FLUX.1-dev"
+    # lora_local_dir = f"/root/private_data/wangqiqi/MagicOmini/runs/totbs8_1GPU_1024_1024_{task}_AdamW/ckpt"
+
+    lora_local_dir = f"/root/private_data/wangqiqi/MagicOmini/runs/totbs8_1GPU_512_512_{task}_Prodigy/ckpt"
     lora_ckpt_name = "default.safetensors"
     
+    img_size = 512
 
-    gt_image_dir = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_data/{task}/eval/gt"
-    cond_image_dir = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_data/{task}/eval/cond"
-    jsons_dir = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_data/{task}/eval/jsons"
-    num_imgs = 6
-    lora_steps = ["1000", "2000", "5000", "10000", "20000", "50000"]
-    # lora_steps = ["50000"]
-    
+    gt_image_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/gt"
+    cond_image_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/cond"
+    jsons_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/jsons"
+    num_imgs = 8
+    # lora_steps = ["1000", "2000", "5000", "10000", "20000", "50000"]
+    # lora_steps = ["10000", "20000", "30000", "40000", "50000"]
+    lora_steps = ["2000","5000","10000","20000","30000"]
+    # lora_steps = ["30000"]
     # import ipdb;ipdb.set_trace();
 
     pipe = FluxPipeline.from_pretrained(
@@ -143,11 +155,20 @@ def main():
     # gt_image_path = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_data/{task}/eval/gt/000002387.jpg"
     # cond_image_path = f"/ssd/zhenlianghe/users/wangqiqi/Working_Now/omini_data/{task}/eval/cond/000002387.jpg"
     # image_prompt = "a white room with a tree painted on the wall"
-    # infer_1_example(pipe, gt_image_path, cond_image_path, image_prompt, adapter_name)
+    
+
     # -------------------- infer 1 example --------------------
 
+    # # NOTE: temp test
+    # gt_image_path = "/root/private_data/wangqiqi/MagicOmini/eval_c2_test.jpg"
+    # cond_image_path = "/root/private_data/wangqiqi/MagicOmini/eval_c2_test.jpg"
+    # image_prompt = "a green cup of coffee and a pen on a wooden table"
+    # adapter_name = adapter_names[0]
+    # infer_1_example(pipe, gt_image_path, cond_image_path, image_prompt, adapter_name, img_size)
+
+
     # -------------------- infer multi-examples with loras of different steps --------------------
-    infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jsons_dir, num_imgs, adapter_names, task)
+    infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jsons_dir, num_imgs, adapter_names, task, img_size)
     # -------------------- infer multi-examples with loras of different steps --------------------
 
 

@@ -1,9 +1,12 @@
 transformers
 diffusers
 peft
-opencv-python
+opencv-python-headless==4.9.0.80
 protobuf
 sentencepiece
 gradio
 jupyter
-torchao
+datasets
+lightning
+wandb
+prodigyopt

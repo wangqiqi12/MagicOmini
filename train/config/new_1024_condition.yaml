@@ -6,7 +6,7 @@ model:
 
 train:
   # NOTE: run_name 每次都记得要修改！
-  run_name: totbs8_1GPU_512_512_sketch_Prodigy # remember to change it every time!
+  run_name: totbs8_1GPU_1024_1024_sketch_AdamW # remember to change it every time!
 
   accumulate_grad_batches: 8
   batch_size: 1
@@ -23,7 +23,7 @@ train:
   condition_type: "sketch"  
   dataset:
     custom: true
-    data_dir: "/root/private_data/wangqiqi/data/pexels_512_512/sketch/train"
+    data_dir: "/root/private_data/wangqiqi/data/pexels_1024_1024/sketch/train"
     type: "img"
     # urls:
       # (Uncomment the following lines to use more data)
@@ -36,14 +36,14 @@ train:
       # - "https://huggingface.co/datasets/jackyhate/text-to-image-2M/resolve/main/data_512_2M/data_000046.tar"
     # cache_name: "data_512_2M"
     condition_size: 
-      - 512 # 512
-      - 512 # 512
+      - 1024 # 512
+      - 1024 # 512
     target_size: 
-      - 512 # 512
-      - 512 # 512
+      - 1024 # 512
+      - 1024 # 512
     drop_text_prob: 0.1
     drop_image_prob: 0.1
-    cond_test_imgpath: "/root/private_data/wangqiqi/data/pexels_512_512/sketch/eval/cond/000000375.jpg"
+    cond_test_imgpath: "/root/private_data/wangqiqi/data/pexels_1024_1024/sketch/eval/cond/000000375.jpg"
     cond_test_imgprompt: "turkish flag on top of mountain"
 
 
@@ -51,24 +51,24 @@ train:
     project: "OminiControl"
 
   lora_config:
-    r: 4
-    lora_alpha: 4
+    r: 16
+    lora_alpha: 16
     init_lora_weights: "gaussian"
     target_modules: "(.*x_embedder|.*(?<!single_)transformer_blocks\\.[0-9]+\\.norm1\\.linear|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_k|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_q|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_v|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_out\\.0|.*(?<!single_)transformer_blocks\\.[0-9]+\\.ff\\.net\\.2|.*single_transformer_blocks\\.[0-9]+\\.norm\\.linear|.*single_transformer_blocks\\.[0-9]+\\.proj_mlp|.*single_transformer_blocks\\.[0-9]+\\.proj_out|.*single_transformer_blocks\\.[0-9]+\\.attn.to_k|.*single_transformer_blocks\\.[0-9]+\\.attn.to_q|.*single_transformer_blocks\\.[0-9]+\\.attn.to_v|.*single_transformer_blocks\\.[0-9]+\\.attn.to_out)"
     # (Uncomment the following lines to train less parameters while keeping the similar performance)
     # target_modules: "(.*(?<!single_)transformer_blocks\\.[0-9]+\\.norm1\\.linear|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_k|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_q|.*single_transformer_blocks\\.[0-9]+\\.norm\\.linear|.*single_transformer_blocks\\.[0-9]+\\.attn.to_k|.*single_transformer_blocks\\.[0-9]+\\.attn.to_q)"
 
-  optimizer:
-    type: "Prodigy"
-    params:
-      lr: 1
-      use_bias_correction: true
-      safeguard_warmup: true
-      weight_decay: 0.01
+  # optimizer:
+  #   type: "Prodigy"
+  #   params:
+  #     lr: 1
+  #     use_bias_correction: true
+  #     safeguard_warmup: true
+  #     weight_decay: 0.01
 
   # (To use AdamW Optimizer, uncomment the following lines)
-  # optimizer:
-  #   type: "AdamW"
-  #   params:
-  #     lr: 0.0001
-  #     weight_decay: 0.001
+  optimizer:
+    type: "AdamW"
+    params:
+      lr: 0.00003
+      weight_decay: 0.005

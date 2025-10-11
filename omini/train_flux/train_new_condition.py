@@ -398,7 +398,13 @@ def main():
         # 使用自定义数据集
         print("Using custom dataset...")
         base_dataset = CustomImageConditionDataset(
-            data_dir=training_config["dataset"].get("data_dir", None)
+            data_dir=training_config["dataset"].get("data_dir", None),
+            condition_size=training_config["dataset"]["condition_size"],
+            target_size=training_config["dataset"]["target_size"],
+            condition_type=training_config["condition_type"],
+            drop_text_prob=training_config["dataset"]["drop_text_prob"],
+            drop_image_prob=training_config["dataset"]["drop_image_prob"],
+            position_scale=training_config["dataset"].get("position_scale", 1.0),
         )
     else:
         # 使用原有的webdataset， 即Load dataset text-to-image-2M
@@ -412,6 +418,8 @@ def main():
         )
 
     # Initialize custom dataset (统一使用ImageConditionDataset包装)
+        
+    # import ipdb;ipdb.set_trace();
     dataset = ImageConditionDataset(
             base_dataset,
             condition_size=training_config["dataset"]["condition_size"],
