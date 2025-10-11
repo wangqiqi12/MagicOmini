@@ -2,7 +2,7 @@
 export CUDA_VISIBLE_DEVICES=0
 
 # *[Specify the config file path]
-export OMINI_CONFIG=./train/config/new_condition.yaml
+export OMINI_CONFIG=./train/config/new_512_condition.yaml
 
 # *[Specify the WANDB API key]
 # export WANDB_API_KEY='YOUR_WANDB_API_KEY'
