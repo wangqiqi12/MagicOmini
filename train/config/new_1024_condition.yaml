@@ -6,11 +6,11 @@ model:
 
 train:
   # NOTE: run_name 每次都记得要修改！
-  run_name: totbs8_1GPU_1024_1024_sketch_AdamW # remember to change it every time!
+  run_name: 4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy # remember to change it every time!
 
   accumulate_grad_batches: 8
   batch_size: 1
-  dataloader_workers: 5
+  dataloader_workers: 32
   save_interval: 1000
   sample_interval: 100
   max_steps: -1
@@ -51,24 +51,24 @@ train:
     project: "OminiControl"
 
   lora_config:
-    r: 16
-    lora_alpha: 16
+    r: 32
+    lora_alpha: 32
     init_lora_weights: "gaussian"
     target_modules: "(.*x_embedder|.*(?<!single_)transformer_blocks\\.[0-9]+\\.norm1\\.linear|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_k|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_q|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_v|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_out\\.0|.*(?<!single_)transformer_blocks\\.[0-9]+\\.ff\\.net\\.2|.*single_transformer_blocks\\.[0-9]+\\.norm\\.linear|.*single_transformer_blocks\\.[0-9]+\\.proj_mlp|.*single_transformer_blocks\\.[0-9]+\\.proj_out|.*single_transformer_blocks\\.[0-9]+\\.attn.to_k|.*single_transformer_blocks\\.[0-9]+\\.attn.to_q|.*single_transformer_blocks\\.[0-9]+\\.attn.to_v|.*single_transformer_blocks\\.[0-9]+\\.attn.to_out)"
     # (Uncomment the following lines to train less parameters while keeping the similar performance)
     # target_modules: "(.*(?<!single_)transformer_blocks\\.[0-9]+\\.norm1\\.linear|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_k|.*(?<!single_)transformer_blocks\\.[0-9]+\\.attn\\.to_q|.*single_transformer_blocks\\.[0-9]+\\.norm\\.linear|.*single_transformer_blocks\\.[0-9]+\\.attn.to_k|.*single_transformer_blocks\\.[0-9]+\\.attn.to_q)"
 
-  # optimizer:
-  #   type: "Prodigy"
-  #   params:
-  #     lr: 1
-  #     use_bias_correction: true
-  #     safeguard_warmup: true
-  #     weight_decay: 0.01
+  optimizer:
+    type: "Prodigy"
+    params:
+      lr: 1
+      use_bias_correction: true
+      safeguard_warmup: true
+      weight_decay: 0.01
 
   # (To use AdamW Optimizer, uncomment the following lines)
-  optimizer:
-    type: "AdamW"
-    params:
-      lr: 0.00003
-      weight_decay: 0.005
+  # optimizer:
+  #   type: "AdamW"
+  #   params:
+  #     lr: 0.00003
+  #     weight_decay: 0.005

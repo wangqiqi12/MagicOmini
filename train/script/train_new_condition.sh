@@ -1,8 +1,8 @@
 # *[Specify the config file path and the GPU devices to use]
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # *[Specify the config file path]
-export OMINI_CONFIG=./train/config/new_512_condition.yaml
+export OMINI_CONFIG=./train/config/new_1024_condition.yaml
 
 # *[Specify the WANDB API key]
 # export WANDB_API_KEY='YOUR_WANDB_API_KEY'

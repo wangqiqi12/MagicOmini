@@ -8,6 +8,8 @@ from peft import LoraConfig, get_peft_model_state_dict
 from torch.utils.data import DataLoader
 import time
 
+from datetime import datetime
+
 from typing import List
 
 import prodigyopt
@@ -197,8 +199,10 @@ class OminiModel(L.LightningModule):
                 # Add position delta (see OminiControl)
                 c_ids[:, 1] += p_delta[0][0]
                 c_ids[:, 2] += p_delta[0][1]
-                if len(p_delta) > 1:
-                    print("Warning: only the first position delta is used.")
+                
+                # NOTE: temporarily set for sketch
+                # if len(p_delta) > 1:
+                #     print("Warning: only the first position delta is used.")
                 # Append to the list
                 if latent_mask is not None:
                     c_latents, c_ids = c_latents[latent_mask], c_ids[latent_mask[0]]
@@ -300,14 +304,18 @@ class TrainingCallback(L.Callback):
             wandb.log(report_dict)
 
         if self.total_steps % self.print_every_n_steps == 0:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps}, Batch: {batch_idx}, Loss: {pl_module.log_loss:.4f}, Gradient size: {gradient_size:.4f}, Max gradient size: {max_gradient_size:.4f}"
+                # f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps}, Batch: {batch_idx}, Loss: {pl_module.log_loss:.4f}, Gradient size: {gradient_size:.4f}, Max gradient size: {max_gradient_size:.4f}"
+                f"[{current_time}] Epoch: {trainer.current_epoch}, Steps: {self.total_steps}, Batch: {batch_idx}, Loss: {pl_module.log_loss:.4f}, Gradient size: {gradient_size:.4f}, Max gradient size: {max_gradient_size:.4f}"
             )
 
         # Save LoRA weights at specified intervals
         if self.total_steps % self.save_interval == 0:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Saving LoRA weights"
+                # f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Saving LoRA weights"
+                f"[{current_time}] Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Saving LoRA weights"
             )
             pl_module.save_lora(
                 f"{self.save_path}/{self.run_name}/ckpt/{self.total_steps}"
@@ -315,8 +323,10 @@ class TrainingCallback(L.Callback):
 
         # Generate and save a sample image at specified intervals
         if self.total_steps % self.sample_interval == 0 and self.test_function:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Generating a sample"
+                # f"Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Generating a sample"
+                f"[{current_time}] Epoch: {trainer.current_epoch}, Steps: {self.total_steps} - Generating a sample"
             )
             pl_module.eval()
             self.test_function(

@@ -26,7 +26,7 @@ def initialize_pipeline():
             pipe = pipe.to("cuda")
             
             # NOTE: 请修改为你的实际LoRA路径  
-            lora_path = "/root/private_data/wangqiqi/Omini_ckpts/lora_sketch_1024_1024_5w"
+            lora_path = "/root/private_data/wangqiqi/MagicOmini/runs/4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy/ckpt/15000"
             pipe.load_lora_weights(
                 lora_path,
                 weight_name="default.safetensors",
@@ -148,9 +148,6 @@ def generate_image(base_image, sketch_data, prompt, num_steps, guidance_scale):
             return None, None, mask_status
         
         # 创建condition
-        # 创建condition前激活 LoRA
-        pipe.set_adapters("sketch")  # ← 新增
-
         condition = Condition(masked_image, "sketch")
         
         # 设置随机种子
@@ -196,7 +193,7 @@ def update_sketch_pad(base_image):
     
     # 将PIL图像转换为numpy数组
     if isinstance(base_image, Image.Image):
-        # 调整到1024 * 1024并转换为numpy数组
+        # 调整到1024x1024并转换为numpy数组
         resized_image = base_image.resize((1024, 1024)).convert('RGB')
         return np.array(resized_image)
     elif isinstance(base_image, np.ndarray):
@@ -329,6 +326,7 @@ def create_ui():
             
             ### 注意事项:
             - 确保已正确配置模型路径（在代码中修改local_path和lora_path）
+            - 建议使用1024x1024分辨率的图像以获得最佳效果
             - 先用白笔涂抹区域，再用黑笔勾勒细节
             - 编辑后的图像（包含白色mask和黑色sketch）将作为条件图输入模型
             """)

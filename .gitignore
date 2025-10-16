@@ -3,3 +3,4 @@ cache/
 infers/sketch_512_output/
 test_images/
 clean_out/
+gradio_output/
