@@ -18,7 +18,7 @@ pipe = FluxPipeline.from_pretrained(
 )
 pipe = pipe.to("cuda")
 # NOTE: mind ckpt path!
-local_path = "/root/private_data/wangqiqi/MagicOmini/runs/4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy/ckpt/15000"
+local_path = "/root/private_data/wangqiqi/MagicOmini/runs/colorhint_4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy/ckpt/30000"
 # local_path = "/root/private_data/wangqiqi/Omini_ckpts/lora_sketch" # 改成512*512就没有问题
 pipe.load_lora_weights(
     local_path,
@@ -31,7 +31,7 @@ pipe.set_adapters("sketch")
 
 # -------------------- example 1 --------------------
 
-image = Image.open("./test4.jpg").convert("RGB").resize((img_size, img_size))
+image = Image.open("./test_c2.png").convert("RGB").resize((img_size, img_size))
 
 # image.save("example_out_1.jpg")
 # masked_image = image.copy()
@@ -48,7 +48,8 @@ result_img = generate(
     height=img_size,
 ).images[0]
 
-result_img.save(f"example_out_{img_size}_test4.jpg")
+result_img.save(f"example_out_{img_size}_test_c2.jpg")
+# 000018721
 
 # concat_image = Image.new("RGB", (1536, 512))
 # concat_image.paste(image, (0, 0))
