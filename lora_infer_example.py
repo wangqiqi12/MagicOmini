@@ -48,7 +48,7 @@ result_img = generate(
     height=img_size,
 ).images[0]
 
-result_img.save(f"example_out_{img_size}_test_c2.jpg")
+result_img.save(f"example_out_{img_size}_test_c2_2.jpg")
 # 000018721
 
 # concat_image = Image.new("RGB", (1536, 512))

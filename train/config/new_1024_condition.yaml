@@ -6,7 +6,7 @@ model:
 
 train:
   # NOTE: run_name 每次都记得要修改！
-  run_name: 4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy # remember to change it every time!
+  run_name: colorhint_4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy # remember to change it every time!
 
   accumulate_grad_batches: 8
   batch_size: 1
@@ -43,8 +43,8 @@ train:
       - 1024 # 512
     drop_text_prob: 0.1
     drop_image_prob: 0.1
-    cond_test_imgpath: "/root/private_data/wangqiqi/data/pexels_1024_1024/sketch/eval/cond/000000375.jpg"
-    cond_test_imgprompt: "turkish flag on top of mountain"
+    cond_test_imgpath: "/root/private_data/wangqiqi/data/pexels_1024_1024/sketch/eval/cond/000000727.png"
+    cond_test_imgprompt: "a beach with a lot of palm trees and a kite flying"
 
 
   wandb:

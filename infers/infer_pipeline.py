@@ -59,11 +59,15 @@ def infer_multi_imgs_with_diff_lorasteps(pipe, gt_image_dir, cond_image_dir, jso
     cond_image_dir = Path(cond_image_dir)
     jsons_dir = Path(jsons_dir)
     sample_ids = sample_json_ids(jsons_dir, sample_size=num_imgs)
+    # NOTE：临时修改为指定id
+    sample_ids = ["000018721", "000003157", "000003202", "000003360"]
+
+
     print("sample image's ids: ",sample_ids)
     for id in sample_ids:
         # TODO: check
         gt_image_path = gt_image_dir / f"{id}.jpg"
-        cond_image_path = cond_image_dir / f"{id}.jpg"
+        cond_image_path = cond_image_dir / f"{id}.jpg" # NOTE: 注意这里的格式png！
         json_path = jsons_dir / f"{id}.json"
         # read prompt
         with open(json_path, "r", encoding="utf-8") as f:
@@ -119,19 +123,19 @@ def main():
     FLUX_local_path = "/root/private_data/wangqiqi/Omini_ckpts/FLUX.1-dev"
     # lora_local_dir = f"/root/private_data/wangqiqi/MagicOmini/runs/totbs8_1GPU_1024_1024_{task}_AdamW/ckpt"
 
-    lora_local_dir = f"/root/private_data/wangqiqi/MagicOmini/runs/totbs8_1GPU_512_512_{task}_Prodigy/ckpt"
+    lora_local_dir = f"/root/private_data/wangqiqi/MagicOmini/runs/4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy/ckpt"
     lora_ckpt_name = "default.safetensors"
     
-    img_size = 512
+    img_size = 1024
 
     gt_image_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/gt"
-    cond_image_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/cond"
+    cond_image_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/cond_clean"
     jsons_dir = f"/root/private_data/wangqiqi/data/pexels_{img_size}_{img_size}/{task}/eval/jsons"
-    num_imgs = 8
+    num_imgs = 5
     # lora_steps = ["1000", "2000", "5000", "10000", "20000", "50000"]
     # lora_steps = ["10000", "20000", "30000", "40000", "50000"]
-    lora_steps = ["2000","5000","10000","20000","30000"]
-    # lora_steps = ["30000"]
+    # lora_steps = ["2000","5000","10000","20000","30000"]
+    lora_steps = ["15000"]
     # import ipdb;ipdb.set_trace();
 
     pipe = FluxPipeline.from_pretrained(
