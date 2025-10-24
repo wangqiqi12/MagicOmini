@@ -31,7 +31,7 @@ pipe.set_adapters("sketch")
 
 # -------------------- example 1 --------------------
 
-image = Image.open("./test_c2.png").convert("RGB").resize((img_size, img_size))
+image = Image.open(f"./output/n_1.png").convert("RGB").resize((img_size, img_size))
 
 # image.save("example_out_1.jpg")
 # masked_image = image.copy()
@@ -42,13 +42,13 @@ condition = Condition(image, "sketch")
 seed_everything()
 result_img = generate(
     pipe,
-    prompt="apple and lemon",
+    prompt="notebook",
     conditions=[condition],
     width=img_size,
     height=img_size,
 ).images[0]
 
-result_img.save(f"example_out_{img_size}_test_c2_2.jpg")
+result_img.save(f"example_out_{img_size}_test_n_1.jpg")
 # 000018721
 
 # concat_image = Image.new("RGB", (1536, 512))

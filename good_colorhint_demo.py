@@ -9,6 +9,8 @@ import cv2
 from omini.pipeline.flux_omini import Condition, generate, seed_everything
 
 # 全局变量
+N_POINTS = 1
+
 pipe = None
 edit_confirmed = False  # 编辑确认状态
 color_confirmed = False  # 颜色提示确认状态
@@ -342,7 +344,7 @@ def create_color_condition_image(base_image, sketch_data, color_stroke_data):
         color_image = color_image.resize((1024, 1024)).convert('RGB')
         
         # 提取颜色提示并生成最终条件图
-        final_cond_image = extract_color_hints_from_strokes(color_image, masked_image, radius=5, n_points=30)
+        final_cond_image = extract_color_hints_from_strokes(color_image, masked_image, radius=5, n_points=N_POINTS)
         
         if final_cond_image is None:
             return masked_image, "颜色提示提取失败，使用基础条件图"

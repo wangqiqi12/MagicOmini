@@ -4,6 +4,8 @@ import cv2
 import os
 from datetime import datetime
 
+N_POINTS = 30
+
 def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5, n_points=30):
     """从颜色笔触中直接提取纯色方块 - 参考UI_app.py的generate_color_hints_like_reference函数"""
     if stroke_image is None or original_cond_image is None:
@@ -153,7 +155,7 @@ def process_color_hints(original_cond, stroke_edited):
         print(f"Debug: Processing images with shape: {stroke_image.shape}")
         
         # 提取颜色提示并生成新的条件图
-        new_cond_image = extract_color_hints_from_strokes(stroke_image, original_cond, radius=5, n_points=30)
+        new_cond_image = extract_color_hints_from_strokes(stroke_image, original_cond, radius=5, n_points=N_POINTS)
         
         if new_cond_image is None:
             return original_cond, "⚠️ 颜色提示提取失败，返回原图"
@@ -170,7 +172,7 @@ def process_color_hints(original_cond, stroke_edited):
         traceback.print_exc()
         return None, f"❌ 处理过程中出错: {str(e)}"
 
-def save_result_image(image):
+def save_result_image(image, n_points):
     """保存结果图像为PNG格式"""
     if image is None:
         return None, "❌ 没有图像可以保存"
@@ -180,7 +182,7 @@ def save_result_image(image):
     
     try:
         # 保存为PNG格式，确保无损
-        filename = f"output/cond_{timestamp}.png"
+        filename = f"output/n_{n_points}.png"
         png_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]
         cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR), png_params)
         
@@ -211,6 +213,14 @@ with gr.Blocks(title="🎨 颜色提示添加器") as demo:
             
             # 控制按钮
             gr.Markdown("## 🔧 操作")
+            n_points_slider = gr.Slider(
+                minimum=1,
+                maximum=30,
+                value=30,
+                step=1,
+                label="颜色提示点数量",
+                info="控制生成的颜色方块数量 (1-30)"
+            )
             generate_btn = gr.Button("🎯 生成新条件图", variant="primary", size="lg")
             clear_btn = gr.Button("🗑️ 清空", variant="secondary")
             
@@ -254,19 +264,59 @@ with gr.Blocks(title="🎨 颜色提示添加器") as demo:
         
         return original, "条件图已上传，请在白色区域添加颜色"
     
-    def generate_new_cond(original, edited):
+    def generate_new_cond(original, edited, n_points):
         """生成新的条件图"""
-        new_image, status = process_color_hints(original, edited)
-        
-        if new_image is not None:
-            # 保存文件
-            filepath, save_status = save_result_image(new_image)
-            if filepath:
-                return new_image, status + "\n" + save_status, filepath
+        try:
+            if original is None:
+                return None, "❌ 请先上传条件图", None
+            
+            if edited is None:
+                return None, "❌ 请先添加颜色笔触", None
+            
+            # 确保图像格式一致
+            original = ensure_rgb_format(original)
+            
+            # 处理ImageEditor返回的数据格式
+            if isinstance(edited, dict):
+                if 'composite' in edited and edited['composite'] is not None:
+                    stroke_image = edited['composite']
+                else:
+                    return None, "⚠️ 未检测到有效编辑", None
             else:
-                return new_image, status + "\n" + save_status, None
-        else:
-            return None, status, None
+                stroke_image = edited
+            
+            stroke_image = ensure_rgb_format(stroke_image)
+            
+            if stroke_image is None or original is None:
+                return None, "❌ 图像格式错误", None
+            
+            # 使用用户指定的n_points生成颜色提示
+            new_image = extract_color_hints_from_strokes(
+                stroke_image,
+                original,
+                radius=5,
+                n_points=int(n_points)
+            )
+            
+            if new_image is not None:
+                # 检查是否有实际的变化
+                if np.array_equal(new_image, original):
+                    return original, "⚠️ 未检测到颜色变化，请在白色区域添加颜色笔触", None
+                
+                # 保存文件
+                filepath, save_status = save_result_image(new_image, int(n_points))
+                if filepath:
+                    return new_image, f"✅ 颜色提示已添加到条件图中 (使用 {int(n_points)} 个颜色点)\n" + save_status, filepath
+                else:
+                    return new_image, f"✅ 颜色提示已添加到条件图中 (使用 {int(n_points)} 个颜色点)\n" + save_status, None
+            else:
+                return None, "❌ 颜色提示提取失败", None
+                
+        except Exception as e:
+            print(f"Error in generate_new_cond: {e}")
+            import traceback
+            traceback.print_exc()
+            return None, f"❌ 处理过程中出错: {str(e)}", None
     
     def clear_all():
         """清空所有内容"""
@@ -281,9 +331,10 @@ with gr.Blocks(title="🎨 颜色提示添加器") as demo:
     
     generate_btn.click(
         fn=generate_new_cond,
-        inputs=[original_cond, color_editor],
+        inputs=[original_cond, color_editor, n_points_slider],
         outputs=[result_image, status_text, download_file]
     )
+
     
     clear_btn.click(
         fn=clear_all,
