@@ -1,4 +1,4 @@
-# OminiControl
+# MagicOmini
 
 
 <img src='./assets/demo/demo_this_is_omini_control.jpg' width='100%' />
