@@ -38,7 +38,7 @@ def initialize_pipeline():
         print(f"✅ 使用GPU: {torch.cuda.get_device_name()}")
         
         # NOTE: 请修改为你的实际模型路径
-        local_path = "/root/private_data/wangqiqi/Omini_ckpts/FLUX.1-dev"
+        local_path = "/root/private_data/wangqiqi12/Omini_ckpts/FLUX.1-dev"
         
         print(f"📂 加载基础模型: {local_path}")
         # 强制使用CUDA - 使用device_map自动处理设备放置
@@ -62,7 +62,7 @@ def initialize_pipeline():
         
         print("📦 加载LoRA权重...")
         # NOTE: 请修改为你的实际LoRA路径  
-        lora_path = "/root/private_data/wangqiqi/MagicOmini/runs/4GPU_bs1_acc8_tot32_1024_1024_r32_sketch_Prodigy/ckpt/15000"
+        lora_path = "/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_1024"
         
         # 检查LoRA文件是否存在
         import os
@@ -888,6 +888,6 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
-        debug=True,
+        debug=False,
         show_error=True
     )
