@@ -5,11 +5,14 @@ import numpy as np
 from diffusers.pipelines import FluxPipeline
 from PIL import Image, ImageDraw
 import cv2
+import argparse
 
 from omini.pipeline.flux_omini import Condition, generate, seed_everything
 
 # 全局变量
 N_POINTS = 1
+USE_CPU = False  # 是否使用CPU运行
+DEVICE = "cuda"  # 默认设备
 
 pipe = None
 edit_confirmed = False  # 编辑确认状态
@@ -25,34 +28,48 @@ status_check_counter = 0  # 状态检查计数器
 last_operation_time = 0  # 最后操作时间
 
 def initialize_pipeline():
-    """初始化pipeline - 强制使用CUDA，返回状态信息"""
-    global pipe
+    """初始化pipeline - 支持CPU/GPU选择，返回状态信息"""
+    global pipe, USE_CPU, DEVICE
     
     if pipe is not None:
-        return True, "✅ Pipeline已就绪"
+        return True, f"✅ Pipeline已就绪 (设备: {DEVICE})"
     
     print("🔄 正在初始化pipeline...")
     
     try:
-        # 强制检查CUDA可用性
-        if not torch.cuda.is_available():
-            error_msg = "❌ CUDA不可用，请确保GPU驱动正确安装"
-            print(error_msg)
-            return False, error_msg
-        
-        print(f"✅ 使用GPU: {torch.cuda.get_device_name()}")
+        # 检查设备可用性
+        if USE_CPU:
+            DEVICE = "cpu"
+            print("⚙️ 使用CPU模式")
+        else:
+            if not torch.cuda.is_available():
+                print("⚠️ CUDA不可用，自动切换到CPU模式")
+                DEVICE = "cpu"
+                USE_CPU = True
+            else:
+                DEVICE = "cuda"
+                print(f"✅ 使用GPU: {torch.cuda.get_device_name()}")
         
         # NOTE: 请修改为你的实际模型路径
         local_path = "/root/private_data/wangqiqi12/Omini_ckpts/FLUX.1-dev"
         
         print(f"📂 加载基础模型: {local_path}")
-        # 强制使用CUDA - 使用device_map自动处理设备放置
-        pipe = FluxPipeline.from_pretrained(
-            local_path,
-            torch_dtype=torch.bfloat16,
-            device_map="cuda",  # 自动设备映射，会优先使用CUDA
-            low_cpu_mem_usage=True,
-        )
+        # 根据设备选择加载模型
+        if USE_CPU:
+            print("⚙️ 使用CPU加载模型（可能较慢）...")
+            pipe = FluxPipeline.from_pretrained(
+                local_path,
+                torch_dtype=torch.float32,  # CPU使用float32
+                device_map="cpu",
+                low_cpu_mem_usage=True,
+            )
+        else:
+            pipe = FluxPipeline.from_pretrained(
+                local_path,
+                torch_dtype=torch.bfloat16,  # GPU使用bfloat16
+                device_map="cuda",
+                low_cpu_mem_usage=True,
+            )
         
         # 验证模型设备信息
         try:
@@ -60,10 +77,9 @@ def initialize_pipeline():
                 print(f"🔍 Pipeline设备: {pipe.device}")
             elif hasattr(pipe, 'transformer') and hasattr(pipe.transformer, 'device'):
                 print(f"🔍 Transformer设备: {pipe.transformer.device}")
-            else:
-                print("🔍 设备信息: 使用device_map自动管理")
+            print(f"🎯 当前运行设备: {DEVICE}")
         except:
-            print("🔍 设备信息: 自动管理中")
+            pass
         
         print("📦 加载LoRA权重...")
         # NOTE: 请修改为你的实际LoRA路径  
@@ -95,11 +111,14 @@ def initialize_pipeline():
         except Exception as e:
             print(f"⚠️ 注意力切片不可用: {e}")
         
-        # 注意：使用device_map时不建议同时使用CPU卸载
-        print("💡 使用device_map自动管理内存，跳过CPU卸载")
+        # 设备特定优化
+        if USE_CPU:
+            print("💡 CPU模式：推荐使用较少的推理步数以加快速度")
+        else:
+            print("💡 使用device_map自动管理GPU内存")
         
-        print("🎉 Pipeline初始化完成!")
-        return True, "✅ Pipeline初始化完成!"
+        print(f"🎉 Pipeline初始化完成! (设备: {DEVICE})")
+        return True, f"✅ Pipeline初始化完成! (设备: {DEVICE})"
         
     except FileNotFoundError as e:
         error_msg = f"❌ 文件未找到: {str(e)}"
@@ -230,12 +249,10 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
     white_mask_area = original_gray > 240  # 白色区域
     
     if not np.any(white_mask_area):
-        print("Debug: No white mask area found in original condition image")
         return original_cond_image
     
     # 检查图像形状是否匹配
     if stroke_array.shape != original_cond_array.shape:
-        print(f"Debug: Shape mismatch - stroke: {stroke_array.shape}, original: {original_cond_array.shape}")
         return original_cond_image
     
     # 计算编辑前后的差异，找到新添加的颜色stroke
@@ -253,10 +270,7 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
     valid_color_indices = np.argwhere(significant_change & has_color & white_mask_area)
     
     if len(valid_color_indices) == 0:
-        print("Debug: No valid color strokes found in white mask area")
         return original_cond_image
-    
-    print(f"Debug: Found {len(valid_color_indices)} valid color stroke pixels")
     
     # 创建新的条件图，从原图开始
     new_cond_array = original_cond_array.copy()
@@ -265,8 +279,6 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
     n_sample = min(n_points, len(valid_color_indices))
     sampled_indices = valid_color_indices[np.random.choice(
         len(valid_color_indices), size=n_sample, replace=False)]
-    
-    print(f"Debug: Sampling {n_sample} color points from {len(valid_color_indices)} candidates")
     
     n_valid = 0
     for y, x in sampled_indices:
@@ -298,12 +310,9 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
         new_cond_array[y - radius:y + radius + 1, x - radius:x + radius + 1] = fixed_color
         
         n_valid += 1
-        print(f"Debug: Added color hint block at ({x}, {y}) with color {fixed_color}")
         
         if n_valid >= n_points:
             break  # 达到期望数量就停止
-    
-    print(f"Debug: Generated {n_valid} color hint points from user strokes")
     
     # 返回PIL图像
     if isinstance(original_cond_image, Image.Image):
@@ -352,7 +361,6 @@ def create_color_condition_image(base_image, sketch_data, color_stroke_data):
         return final_cond_image, "✅ 条件图已生成（包含颜色提示）"
         
     except Exception as e:
-        print(f"Error in create_color_condition_image: {e}")
         return None, f"创建颜色条件图失败: {str(e)}"
 
 def save_condition_image(cond_image):
@@ -833,58 +841,47 @@ def create_ui():
         gr.Markdown("# 🎨 OminiControl Inpainting Demo")
         gr.Markdown("**使用说明**: 上传图像 → 编辑mask/sketch并确认 → 添加颜色并生成颜色块 → 确认颜色 → 生成图像 | **响应慢?** 点击📊查询状态")
         
-        # 竖直布局：上传图像区域
+        # 横向布局：上传图像、sketch编辑区、color编辑区
         with gr.Row():
-            base_image = gr.Image(
-                label="📤 1. 上传基础图像",
-                type="pil",
-                height=512,  # 增大显示高度
-                width=512
-            )
-        
-        # 编辑区域
-        with gr.Row():
-            with gr.Column():
+            with gr.Column(scale=1):
+                base_image = gr.Image(
+                    label="📤 1. 上传基础图像",
+                    type="pil",
+                    height=768,
+                    width=768
+                )
+            with gr.Column(scale=1):
                 sketch_pad = gr.ImageEditor(
                     label="🖌️ 2. 在原图上编辑 (白笔涂抹mask区域，黑笔勾勒sketch)",
                     type="numpy",
-                    height=600,  # 显著增大编辑区域
-                    width=600,
+                    height=768,
                     brush=gr.Brush(
                         default_size=15,
-                        colors=["#FFFFFF", "#000000"],  # 白色和黑色画笔
-                        default_color="#FFFFFF"  # 默认白色（用于涂抹mask）
+                        colors=["#FFFFFF", "#000000"],
+                        default_color="#FFFFFF"
                     ),
-                    value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255  # 初始白色背景
+                    value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255
                 )
-                # 确认编辑按钮放在编辑器下方
-                with gr.Row():
-                    confirm_btn = gr.Button("✅ 确认勾画", variant="primary", size="lg")
-        
-        # 颜色提示编辑区域
-        with gr.Row():
-            with gr.Column():
+            with gr.Column(scale=1):
                 color_pad = gr.ImageEditor(
-                    label="🎨 3. 添加颜色提示 (在白色mask区域内添加颜色笔触)",
+                    label="🎨 4. 添加颜色提示 (在mask区域画颜色笔触)",
                     type="numpy",
-                    height=600,
-                    width=600,
+                    height=768,
                     brush=gr.Brush(
                         default_size=10,
                         colors=["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080"],
-                        default_color="#FF0000"  # 默认红色
+                        default_color="#FF0000"
                     ),
-                    value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255  # 初始白色背景
+                    value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255
                 )
-                # 颜色提示按钮放在颜色编辑器下方
-                with gr.Row():
-                    generate_color_btn = gr.Button("🎨 生成颜色提示块", variant="secondary", size="lg")
-                    confirm_color_btn = gr.Button("✅ 确认颜色提示", variant="primary", size="lg")
         
         # 控制按钮区域 
         with gr.Row():
             clear_btn = gr.Button("🗑️ 重置为原图", variant="secondary", size="sm")
-            status_btn = gr.Button("📊 查询状态", variant="primary", size="sm")
+            confirm_btn = gr.Button("✅ 确认编辑", variant="primary", size="sm")
+            generate_color_btn = gr.Button("🎨 生成颜色提示块", variant="secondary", size="sm")
+            confirm_color_btn = gr.Button("✅ 确认颜色提示", variant="primary", size="sm")
+            status_btn = gr.Button("📊 查询状态", variant="secondary", size="sm")
         
         # 条件图展示区域
         gr.Markdown("### 🎯 条件图预览")
@@ -1303,15 +1300,31 @@ def create_ui():
     return demo
 
 if __name__ == "__main__":
-    print("🚀 启动OminiControl Inpainting Demo...")
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='OminiControl Inpainting Demo')
+    parser.add_argument('--cpu', action='store_true', help='在CPU上运行（默认使用GPU）')
+    parser.add_argument('--gpu', action='store_true', help='在GPU上运行（默认选项）')
+    parser.add_argument('--port', type=int, default=7860, help='Gradio服务器端口（默认7860）')
+    args = parser.parse_args()
     
-    # 强制检查CUDA可用性
-    if torch.cuda.is_available():
-        print(f"✅ CUDA可用，GPU: {torch.cuda.get_device_name()}")
+    # 设置设备
+    if args.cpu:
+        USE_CPU = True
+        DEVICE = "cpu"
+        print("🚀 启动OminiControl Inpainting Demo (CPU模式)...")
+        print("⚠️ CPU模式运行速度较慢，推荐使用GPU")
     else:
-        print("❌ CUDA不可用，程序将无法正常工作")
-        print("💡 请确保安装了正确的GPU驱动和CUDA版本")
-        exit(1)
+        # 检查CUDA可用性
+        if torch.cuda.is_available():
+            USE_CPU = False
+            DEVICE = "cuda"
+            print("🚀 启动OminiControl Inpainting Demo (GPU模式)...")
+            print(f"✅ CUDA可用，GPU: {torch.cuda.get_device_name()}")
+        else:
+            print("⚠️ CUDA不可用，自动切换到CPU模式")
+            print("💡 如需使用GPU，请确保安装了正确的GPU驱动和CUDA版本")
+            USE_CPU = True
+            DEVICE = "cpu"
     
     # 创建输出目录
     os.makedirs("gradio_output", exist_ok=True)
@@ -1319,9 +1332,11 @@ if __name__ == "__main__":
     
     # 启动界面
     demo = create_ui()
+    print(f"🌐 Gradio界面将在端口 {args.port} 启动")
+    print(f"🎯 运行设备: {DEVICE}")
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=args.port,
         share=False,
         debug=True,
         show_error=True
