@@ -10,6 +10,7 @@ from omini.pipeline.flux_omini import Condition, generate, seed_everything
 
 # 全局变量
 pipe = None
+img_size = 1024  # 图像尺寸，可选512或1024
 edit_confirmed = False  # 编辑确认状态
 current_edit_data = None  # 当前编辑数据
 last_sketch_hash = None  # 上次编辑数据的哈希值，用于检测变化
@@ -56,8 +57,11 @@ def initialize_pipeline():
             print("🔍 设备信息: 自动管理中")
         
         print("📦 加载LoRA权重...")
-        # NOTE: 请修改为你的实际LoRA路径  
-        lora_path = "root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_1024"
+        # NOTE: 请修改为你的实际LoRA路径 - 根据img_size选择对应权重
+        if img_size == 512:
+            lora_path = "/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_512"
+        else:  # 1024
+            lora_path = "/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_1024"
         
         # 检查LoRA文件是否存在
         import os
@@ -117,7 +121,7 @@ def create_masked_image_from_sketch(base_image, sketch_data):
         # 处理base图像
         if isinstance(base_image, np.ndarray):
             base_image = Image.fromarray(base_image.astype(np.uint8))
-        base_image = base_image.resize((1024, 1024)).convert('RGB')
+        base_image = base_image.resize((img_size, img_size)).convert('RGB')
         
         # 处理用户编辑后的图像数据
         edited_image = None
@@ -148,7 +152,7 @@ def create_masked_image_from_sketch(base_image, sketch_data):
             return None, f"不支持的图像数据类型: {type(edited_image)}"
         
         # 调整尺寸和格式
-        edited_image = edited_image.resize((1024, 1024)).convert('RGB')
+        edited_image = edited_image.resize((img_size, img_size)).convert('RGB')
         
         # 创建mask：检测白色涂抹区域
         edited_array = np.array(edited_image)
@@ -250,8 +254,8 @@ def generate_image(prompt, num_steps, guidance_scale):
                     pipe,
                     prompt=prompt,
                     conditions=[condition],
-                    height=1024,
-                    width=1024,
+                    height=img_size,
+                    width=img_size,
                     num_inference_steps=int(num_steps),
                     guidance_scale=guidance_scale,
                 )
@@ -272,11 +276,11 @@ def generate_image(prompt, num_steps, guidance_scale):
         print("🔗 正在创建对比图...")
         # 创建对比图像 - 优化内存使用
         try:
-            concat_image = Image.new("RGB", (1024 * 3, 1024))
-            base_resized = base_image.resize((1024, 1024)).convert('RGB') if base_image else Image.new("RGB", (1024, 1024), (255, 255, 255))
+            concat_image = Image.new("RGB", (img_size * 3, img_size))
+            base_resized = base_image.resize((img_size, img_size)).convert('RGB') if base_image else Image.new("RGB", (img_size, img_size), (255, 255, 255))
             concat_image.paste(base_resized, (0, 0))
-            concat_image.paste(masked_image, (1024, 0))
-            concat_image.paste(result_img, (1024 * 2, 0))
+            concat_image.paste(masked_image, (img_size, 0))
+            concat_image.paste(result_img, (img_size * 2, 0))
         except Exception as concat_error:
             print(f"对比图创建错误: {concat_error}")
             # 即使对比图失败，也返回生成结果
@@ -327,17 +331,17 @@ def update_sketch_pad(base_image):
     last_sketch_hash = None
     
     if base_image is None:
-        return np.ones((1024, 1024, 3), dtype=np.uint8) * 255  # 白色背景
+        return np.ones((img_size, img_size, 3), dtype=np.uint8) * 255  # 白色背景
     
     # 将PIL图像转换为numpy数组
     if isinstance(base_image, Image.Image):
-        # 调整到1024 * 1024并转换为numpy数组
-        resized_image = base_image.resize((1024, 1024)).convert('RGB')
+        # 调整到指定尺寸并转换为numpy数组
+        resized_image = base_image.resize((img_size, img_size)).convert('RGB')
         return np.array(resized_image)
     elif isinstance(base_image, np.ndarray):
         return base_image
     else:
-        return np.ones((1024, 1024, 3), dtype=np.uint8) * 255
+        return np.ones((img_size, img_size, 3), dtype=np.uint8) * 255
 
 def check_sketch_changes(sketch_data):
     """检测编辑区域是否有变化，并重置确认状态"""
@@ -451,7 +455,16 @@ def confirm_edit_ready(base_image, sketch_data):
 def create_ui():
     with gr.Blocks(title="OminiControl Inpainting Demo", theme=gr.themes.Soft()) as demo:
         gr.Markdown("# 🎨 OminiControl Inpainting Demo")
-        gr.Markdown("**使用说明**: 上传图像 → 编辑 → 确认 → 生成图像")
+        gr.Markdown("**使用说明**: 选择尺寸 → 上传图像 → 编辑 → 确认 → 生成图像")
+        
+        # 尺寸选择控件
+        with gr.Row():
+            size_selector = gr.Radio(
+                choices=[512, 1024],
+                value=1024,
+                label="🔧 选择图像尺寸",
+                info="选择512或1024，将自动加载对应的LoRA权重"
+            )
         
         with gr.Row():
             # 竖直布局：上传图像区域
@@ -473,7 +486,7 @@ def create_ui():
                     colors=["#FFFFFF", "#000000"],
                     default_color="#FFFFFF"
                     ),
-                    value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255
+                    value=np.ones((img_size, img_size, 3), dtype=np.uint8) * 255
                 )
         
         # 控制按钮区域 
@@ -547,20 +560,24 @@ def create_ui():
         with gr.Accordion("📖 详细使用说明", open=False):
             gr.Markdown("""
             ### 步骤说明:
-            1. **上传图像**: 选择你想要编辑的基础图像
-            2. **在原图上编辑**: 
+            1. **选择尺寸**: 选择512x512或1024x1024（对应不同的LoRA权重）
+            2. **上传图像**: 选择你想要编辑的基础图像
+            3. **在原图上编辑**: 
                - 使用**白色画笔**涂抹需要修复/替换的区域（mask区域）
                - 使用**黑色细画笔**在mask区域内勾勒你想要的内容轮廓
-            3. **确认编辑**: 点击"✅ 确认编辑"按钮保存编辑数据
-            4. **输入prompt**: 详细描述你想在编辑区域生成的内容
-            5. **调整参数**: 
+            4. **确认编辑**: 点击"✅ 确认编辑"按钮保存编辑数据
+            5. **输入prompt**: 详细描述你想在编辑区域生成的内容
+            6. **调整参数**: 
                - 推理步数: 建议20-30，更多步数质量更好但速度更慢
                - 引导强度: 建议3-5，控制生成内容与prompt的相关性
-            6. **生成图像**: 点击"🚀 生成图像"按钮开始处理
-            7. **继续编辑**: 生成完成后，点击"🔄 继续编辑"按钮重新编辑
+            7. **生成图像**: 点击"🚀 生成图像"按钮开始处理
+            8. **继续编辑**: 生成完成后，点击"🔄 继续编辑"按钮重新编辑
             
             ### 注意事项:
             - 确保已正确配置模型路径（在代码中修改local_path和lora_path）
+            - 切换尺寸后会自动重置状态并在下次生成时加载对应的LoRA权重
+            - 512权重路径: `/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_512`
+            - 1024权重路径: `/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_1024`
             - 必须先用白笔涂抹区域，再用黑笔勾勒细节
             - **必须点击"确认编辑"按钮**才能进行生成
             - 编辑后的图像（包含白色mask和黑色sketch）将作为条件图输入模型
@@ -568,6 +585,35 @@ def create_ui():
             """)
         
         # 事件绑定 - 添加更好的用户体验
+        
+        # 尺寸切换处理函数
+        def change_img_size(new_size, base_img):
+            """切换图像尺寸并重置状态"""
+            global img_size, edit_confirmed, current_edit_data, last_sketch_hash, pipe
+            
+            # 如果尺寸发生变化，重置pipeline以加载新的LoRA权重
+            if new_size != img_size:
+                img_size = new_size
+                pipe = None  # 重置pipeline，下次生成时会重新初始化
+                edit_confirmed = False
+                current_edit_data = None
+                last_sketch_hash = None
+                
+                status = f"✅ 已切换到 {img_size}x{img_size} 尺寸，下次生成时将加载对应权重"
+            else:
+                status = f"当前尺寸: {img_size}x{img_size}"
+            
+            # 更新sketch_pad背景
+            sketch_result = update_sketch_pad(base_img)
+            return sketch_result, status
+        
+        # 绑定尺寸切换事件
+        size_selector.change(
+            fn=change_img_size,
+            inputs=[size_selector, base_image],
+            outputs=[sketch_pad, status_text],
+            show_progress="hidden"
+        )
         
         # 当上传新图像时，自动更新ImageEditor的背景
         base_image.change(
@@ -655,3 +701,7 @@ if __name__ == "__main__":
         debug=True,
         show_error=True
     )
+
+# TODO：将1024换成可调的参数变量，即可以选择512也可1024。同时注意load的权重：
+# 512*512的大小："/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_512"
+# 1024*1024的大小："/root/private_data/wangqiqi12/Omini_ckpts/omni_ckpts/only_sketch_1024"
