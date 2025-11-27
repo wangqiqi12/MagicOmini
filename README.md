@@ -1,7 +1,7 @@
 # MagicOmini
 
 
-<img src='./assets/demo/demo_this_is_omini_control.jpg' width='100%' />
+<img src='./new_assets/banana on the table.jpg' width='100%' />
 <br>
 
 
@@ -30,7 +30,16 @@ conda activate magicomini
 pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
-### Usage example
+
+## Visual Result
+### Simple UI sketch example
+
+<img src='./readme_assets/simplers2.jpg' width='100%' />
+
+<img src='./readme_assets/simplers1.jpg' width='100%' />
+
+### Complicated UI sketch example 
+
 
 
 ### Guidelines for subject-driven generation
