@@ -453,7 +453,7 @@ def confirm_edit_ready(base_image, sketch_data):
 
 # 创建Gradio界面
 def create_ui():
-    with gr.Blocks(title="OminiControl Inpainting Demo", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="OminiControl Inpainting Demo") as demo:
         gr.Markdown("# 🎨 OminiControl Inpainting Demo")
         gr.Markdown("**使用说明**: 选择尺寸 → 上传图像 → 编辑 → 确认 → 生成图像")
         
