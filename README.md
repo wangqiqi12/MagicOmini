@@ -40,6 +40,9 @@ pip install -r requirements.txt
 
 ### Complicated UI sketch example 
 
+<img src='./readme_assets/complicated_example.jpg' width='100%' />
+
+### UI sketch example with hint of color
 
 
 ### Guidelines for subject-driven generation
