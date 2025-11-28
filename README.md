@@ -1,12 +1,14 @@
 # MagicOmini
 
-
-<img src='./new_assets/banana on the table.jpg' width='100%' />
+<div align="center">
+  <img src='./readme_assets/gif_assets/ex1.gif' width='49%' />
+  <img src='./readme_assets/gif_assets/ex2.gif' width='49%' />
+</div>
 <br>
 
 
 
-> **MagicOmini: Efficient Sketch Editing for Diffusion Transformers**
+> **MagicOmini: Efficient Local Sketch Editing for Diffusion Transformers**
 > <br>
 > Qiqi Wang, 
 University of Chinese Academy of Sciences
@@ -16,7 +18,7 @@ University of Chinese Academy of Sciences
 
 ## Features
 
-MagicOmini is a minimal yet powerful local sketch-editing framework for Diffusion Transformer models like [FLUX](https://github.com/black-forest-labs/flux).
+MagicOmini is a minimal yet powerful local sketch-editing framework for Diffusion Transformer models like [FLUX](https://github.com/black-forest-labs/flux), built upon [OminiControl](https://github.com/Yuanshi9815/OminiControl).
 
 ## Quick Start
 ### Setup (Optional)
@@ -54,6 +56,19 @@ pip install -r requirements.txt
 
 ## Acknowledgment
 
+We would like to thank the [OminiControl](https://github.com/Yuanshi9815/OminiControl) team for their excellent work, which serves as the foundation for this project.
+
 
 ## Citation
+
+If you find this work useful, please consider citing:
+
+```bibtex
+@article{ominicontrol,
+  title={OminiControl: Minimal and Universal Control for Diffusion Transformer},
+  author={Xiang, Zhenxiong and Hu, Xinzhe and Zheng, Haoji and Dang, Yingqing and Li, Ying and Shi, Min and Liu, Haoming and Qiao, Yu and Shan, Ying},
+  journal={arXiv preprint arXiv:2411.15098},
+  year={2024}
+}
+```
 
