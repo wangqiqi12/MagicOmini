@@ -33,6 +33,10 @@ pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https
 pip install -r requirements.txt
 ```
 
+3. **Checkpoints**
+Coming soon
+
+
 ## Visual Result
 ### Simple UI sketch example
 
@@ -46,11 +50,17 @@ pip install -r requirements.txt
 
 ### UI sketch example with hint of color
 
+#### Different color
 
-### Guidelines for subject-driven generation
+<img src='./readme_assets/color1.jpg' width='100%' />
+
+#### Same color of different intensity
+
+<img src='./readme_assets/color2.jpg' width='100%' />
+
+
+### Notation
 1. Input images are automatically resized to 512x512 or 1024x1024 resolution.
-
-
 
 
 
@@ -71,4 +81,3 @@ If you find this work useful, please consider citing:
   year={2024}
 }
 ```
-
