@@ -226,7 +226,7 @@ def create_masked_image_from_sketch(base_image, sketch_data):
     except Exception as e:
         return None, f"处理编辑图像失败: {str(e)}"
 
-def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5, n_points=30):
+def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5, n_points=70):
     """从颜色笔触中直接提取纯色方块 - 参考color_hint_ui.py"""
     if stroke_image is None or original_cond_image is None:
         return None
@@ -247,9 +247,12 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
         
     original_gray = cv2.cvtColor(original_cond_array, cv2.COLOR_RGB2GRAY)
     white_mask_area = original_gray > 240  # 白色区域
-    
+
+    # 如果条件图中没有明显的白色mask（用户可能没有严格使用白色遮罩），
+    # 不要直接放弃；改为将整个图像作为候选区域以便提取颜色提示（更宽松的容错处理）。
     if not np.any(white_mask_area):
-        return original_cond_image
+        # 宽松回退：允许全图作为mask区域，但会在后续步骤中仍然检测颜色和差异
+        white_mask_area = np.ones_like(original_gray, dtype=bool)
     
     # 检查图像形状是否匹配
     if stroke_array.shape != original_cond_array.shape:
@@ -262,9 +265,9 @@ def extract_color_hints_from_strokes(stroke_image, original_cond_image, radius=5
     # 检测有明显变化的区域
     significant_change = diff_sum > 30
     
-    # 检测stroke_image中的颜色（排除黑色和白色）
+    # 检测stroke_image中的颜色（排除极端黑/白），阈值稍微放宽以捕捉更淡的颜色笔触
     stroke_gray = cv2.cvtColor(stroke_array, cv2.COLOR_RGB2GRAY)
-    has_color = (stroke_gray > 50) & (stroke_gray < 240)  # 不是黑色也不是白色
+    has_color = (stroke_gray > 20) & (stroke_gray < 245)  # 不是极暗也不是几乎纯白
     
     # 找到既在白色mask区域、又有颜色、又是新添加的像素
     valid_color_indices = np.argwhere(significant_change & has_color & white_mask_area)
@@ -416,21 +419,18 @@ def generate_image(prompt, num_steps, guidance_scale):
             print(f"Pipeline初始化错误: {init_error}")
             return None, None, f"❌ 模型初始化失败: {str(init_error)}"
         
-        print("🖼️ 从保存的PNG文件加载条件图...")
-        # 从保存的PNG文件读取条件图，确保输入一致性
+        print("🖼️ 使用内存中的条件图（无需PNG文件）...")
         try:
-            if 'condition_png_path' not in current_color_data:
-                return None, None, "❌ 条件图PNG文件路径缺失，请重新确认颜色提示"
-            
-            condition_png_path = current_color_data['condition_png_path']
-            if not os.path.exists(condition_png_path):
-                return None, None, f"❌ 条件图文件不存在: {condition_png_path}"
-            
-            # 从PNG文件加载条件图
-            masked_image = Image.open(condition_png_path).convert('RGB')
-            print(f"✅ 从PNG文件加载条件图成功: {condition_png_path}")
-            print(f"📏 条件图尺寸: {masked_image.size}")
-            
+            if current_color_data is None or 'condition_image' not in current_color_data:
+                return None, None, "❌ 条件图缺失，请重新生成颜色提示"
+
+            masked_image = current_color_data['condition_image']
+            # 确保为PIL图像
+            if isinstance(masked_image, np.ndarray):
+                masked_image = Image.fromarray(masked_image.astype(np.uint8))
+            masked_image = masked_image.convert('RGB').resize((1024, 1024))
+            print(f"✅ 已加载内存条件图，尺寸: {masked_image.size}")
+
         except Exception as mask_error:
             print(f"条件图加载错误: {mask_error}")
             return None, None, f"❌ 条件图加载失败: {str(mask_error)}"
@@ -485,7 +485,27 @@ def generate_image(prompt, num_steps, guidance_scale):
             concat_image = Image.new("RGB", (1024 * 3, 1024))
             base_resized = base_image.resize((1024, 1024)).convert('RGB') if base_image else Image.new("RGB", (1024, 1024), (255, 255, 255))
             concat_image.paste(base_resized, (0, 0))
-            concat_image.paste(masked_image, (1024, 0))
+            # 中间展示：使用生成颜色提示块前的原始带颜色笔触图（来自current_color_data['color_stroke_data']）
+            stroke_img = None
+            try:
+                if current_color_data and 'color_stroke_data' in current_color_data and current_color_data['color_stroke_data'] is not None:
+                    stroke_raw = current_color_data['color_stroke_data']
+                    if isinstance(stroke_raw, dict) and 'composite' in stroke_raw:
+                        stroke_img = stroke_raw['composite']
+                    elif isinstance(stroke_raw, np.ndarray):
+                        stroke_img = Image.fromarray(stroke_raw.astype(np.uint8))
+                    elif isinstance(stroke_raw, Image.Image):
+                        stroke_img = stroke_raw
+                # 如果没有raw stroke图像，回退到mask图
+                if stroke_img is None:
+                    stroke_img = masked_image
+                if isinstance(stroke_img, np.ndarray):
+                    stroke_img = Image.fromarray(stroke_img.astype(np.uint8))
+                stroke_img = stroke_img.resize((1024, 1024)).convert('RGB')
+            except Exception:
+                stroke_img = masked_image
+
+            concat_image.paste(stroke_img, (1024, 0))
             concat_image.paste(result_img, (1024 * 2, 0))
         except Exception as concat_error:
             print(f"对比图创建错误: {concat_error}")
@@ -755,7 +775,7 @@ def generate_color_hints_from_strokes(color_stroke_data):
     print(f"🎨 [{timestamp}] 生成颜色提示块")
     
     if not edit_confirmed or current_edit_data is None:
-        return "❌ 请先确认编辑完成", None, None
+        return "❌ 请先确认编辑完成", None
     
     try:
         base_image = current_edit_data['base_image']
@@ -767,43 +787,31 @@ def generate_color_hints_from_strokes(color_stroke_data):
             status_msg = "⚠️ 没有颜色笔触，使用基础条件图"
         else:
             condition_image, status = create_color_condition_image(base_image, sketch_data, color_stroke_data)
-            
+
             if condition_image is None:
-                return f"❌ 颜色条件图创建失败: {status}", None, None
-            
+                return f"❌ 颜色条件图创建失败: {status}", None
+
             status_msg = f"✅ 颜色提示块已生成！{status}"
-        
-        # 保存条件图为PNG
-        os.makedirs("condition_images", exist_ok=True)
-        file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        condition_png_path = f"condition_images/condition_{file_timestamp}.png"
-        
-        if isinstance(condition_image, np.ndarray):
-            condition_pil = Image.fromarray(condition_image.astype(np.uint8))
-        else:
-            condition_pil = condition_image
-        
-        condition_pil.save(condition_png_path, format='PNG', optimize=True)
-        
-        # 更新颜色条件数据
-        color_confirmed = False
+
+        # 不再保存为PNG文件，直接使用内存中的条件图
+        # 更新颜色条件数据并自动确认
+        color_confirmed = True
         current_color_data = {
             'condition_image': condition_image,
-            'condition_png_path': condition_png_path,
             'color_stroke_data': color_stroke_data,
             'timestamp': timestamp,
-            'confirmed': False
+            'confirmed': True
         }
-        
-        final_msg = f"{status_msg}\n📁 条件图: {condition_png_path}"
-        print(f"✅ [{timestamp}] 颜色提示块生成完成")
-        
-        return final_msg, condition_image, condition_png_path
+
+        final_msg = f"{status_msg} (已自动确认，并使用内存条件图)"
+        print(f"✅ [{timestamp}] 颜色提示块生成并自动确认完成")
+
+        return final_msg, condition_image
         
     except Exception as e:
         error_msg = f"❌ [{timestamp}] 生成失败: {str(e)}"
         print(error_msg)
-        return error_msg, None, None
+        return error_msg, None
 
 def confirm_color_hints_ready():
     """确认颜色提示准备就绪"""
@@ -822,7 +830,6 @@ def confirm_color_hints_ready():
         current_color_data['confirmed'] = True
         
         condition_image = current_color_data['condition_image']
-        condition_png_path = current_color_data['condition_png_path']
         
         success_msg = f"✅ [{timestamp}] 颜色提示已确认！可以生成图像"
         print(f"✅ [{timestamp}] 颜色确认完成")
@@ -874,39 +881,51 @@ def create_ui():
                     ),
                     value=np.ones((1024, 1024, 3), dtype=np.uint8) * 255
                 )
-        
+            
+            # final condition image display removed (kept in memory only)
+
+
+        # 专门的一栏：展示生成的带颜色提示的条件图（保存在内存中）
+        with gr.Row():
+            condition_preview = gr.Image(
+                label="🔍 生成的条件图（含颜色提示）",
+                type="pil",
+                height=512,
+                width=512
+            )
+
+
         # 控制按钮区域 
         with gr.Row():
             clear_btn = gr.Button("🗑️ 重置为原图", variant="secondary", size="sm")
             confirm_btn = gr.Button("✅ 确认编辑", variant="primary", size="sm")
-            generate_color_btn = gr.Button("🎨 生成颜色提示块", variant="secondary", size="sm")
-            confirm_color_btn = gr.Button("✅ 确认颜色提示", variant="primary", size="sm")
-            status_btn = gr.Button("📊 查询状态", variant="secondary", size="sm")
+            # generate_color_btn moved to dedicated section with n_points slider
         
-        # 条件图展示区域
-        gr.Markdown("### 🎯 条件图预览")
+        # 颜色提示控制区域
+        gr.Markdown("### 🎨 颜色提示设置")
         with gr.Row():
-            condition_image = gr.Image(
-                label="最终条件图 (包含mask、sketch和颜色提示)",
-                type="pil",
-                height=400,
-                width=400
-            )
-            with gr.Column():
-                condition_path_text = gr.Textbox(
-                    label="📁 条件图PNG文件路径",
-                    value="",
-                    interactive=False,
-                    lines=2
+            with gr.Column(scale=2):
+                n_points_slider = gr.Slider(
+                                minimum=1,
+                                maximum=70,
+                                value=N_POINTS,
+                                step=1,
+                                label="🎯 颜色提示块数量",
+                                info="控制从颜色笔触中提取多少个颜色方块（1-70个）"
+                            )
+            with gr.Column(scale=1):
+                confirm_generate_color_btn = gr.Button(
+                    "🎨 确认生成颜色提示块", 
+                    variant="primary", 
+                    size="lg"
                 )
-                download_condition_btn = gr.Button("📥 下载条件图PNG", variant="secondary")
-                condition_file = gr.File(label="条件图下载", visible=True)
         
         # 参数控制区域
+        gr.Markdown("### ⚙️ 生成参数")
         with gr.Row():
             with gr.Column(scale=2):
                 prompt = gr.Textbox(
-                    label="✏️ 4. 输入Prompt描述",
+                    label="✏️ 输入Prompt描述",
                     placeholder="描述你想要在mask区域生成的内容，例如：A beautiful flower vase",
                     lines=2,
                     value="A beautiful vase"
@@ -941,32 +960,7 @@ def create_ui():
                 lines=1
             )
         
-        # 编辑状态监控
-        with gr.Row():
-            edit_status = gr.Textbox(
-                label="🎯 编辑状态",
-                value="⏳ 等待编辑...",
-                interactive=False,
-                lines=1
-            )
-        
-        # 颜色提示状态监控
-        with gr.Row():
-            color_status = gr.Textbox(
-                label="🎨 颜色状态",
-                value="⏳ 等待编辑完成...",
-                interactive=False,
-                lines=1
-            )
-        
-        # 网络状态显示
-        with gr.Row():
-            network_status = gr.Textbox(
-                label="🌐 网络状态",
-                value="🟢 正常",
-                interactive=False,
-                lines=1
-            )
+        # （已简化）主状态使用上面的 `status_text`
         
         # 结果显示区域 - 改为竖直布局
         gr.Markdown("### 📊 结果展示")
@@ -1014,18 +1008,19 @@ def create_ui():
                - 系统会自动将编辑结果同步到颜色编辑器
                - 在颜色编辑器中，使用**彩色画笔**在白色mask区域内添加颜色笔触
                - 颜色笔触会作为生成内容的颜色引导
-            4. **生成颜色提示块**: 点击颜色编辑器下方的"🎨 生成颜色提示块"按钮
-               - 系统会自动提取纯色方块并保存为PNG文件
+            4. **设置颜色提示块数量**: 使用"🎯 颜色提示块数量"滑条选择要提取的颜色方块数量（1-70个）
+            5. **生成颜色提示块**: 点击"🎨 确认生成颜色提示块"按钮
+               - 系统会根据设定的数量自动提取纯色方块并保存为PNG文件
                - **文件路径会显示在界面上，可下载检查**
-            5. **确认颜色提示**: 查看生成的条件图，确认无误后点击"✅ 确认颜色提示"
-            6. **检查条件图**: 可通过"📥 下载条件图PNG"按钮下载检查最终输入给模型的条件图
-            7. **输入prompt**: 详细描述你想在编辑区域生成的内容
-            8. **调整参数**: 
+            6. **确认颜色提示**: 查看生成的条件图，确认无误后点击"✅ 确认颜色提示"
+            7. **检查条件图**: 可通过"📥 下载条件图PNG"按钮下载检查最终输入给模型的条件图
+            8. **输入prompt**: 详细描述你想在编辑区域生成的内容
+            9. **调整参数**: 
                - 推理步数: 建议20-30，更多步数质量更好但速度更慢
                - 引导强度: 建议3-5，控制生成内容与prompt的相关性
-            9. **生成图像**: 点击"🚀 生成图像"按钮开始处理
+            10. **生成图像**: 点击"🚀 生成图像"按钮开始处理
                - **模型将自动读取保存的PNG条件图文件**
-            10. **重新编辑**: 生成完成后，点击"🔄 重新编辑"按钮可重新编辑
+            11. **重新编辑**: 生成完成后，点击"🔄 重新编辑"按钮可重新编辑
             
             ### 注意事项:
             - 确保已正确配置模型路径（在代码中修改local_path和lora_path）
@@ -1049,11 +1044,11 @@ def create_ui():
             - **按钮位置优化**: 每个按钮紧跟对应的编辑器，操作更直观
             
             ### 📱 按钮使用指南:
-            1. 编辑完成后 → 点击编辑器下方的"✅ 确认勾画"
-            2. 添加颜色后 → 点击颜色编辑器下方的"🎨 生成颜色提示块"
-            3. 查看条件图 → 检查生成的条件图是否正确
-            4. 确认无误后 → 点击"✅ 确认颜色提示"
-            5. 如果没反应 → 点击"📊 查询状态"查看当前状态
+            1. 编辑完成后 → 点击"✅ 确认编辑"
+            2. 添加颜色后 → 调整"🎯 颜色提示块数量"滑条选择颜色块数量
+            3. 生成颜色块 → 点击"🎨 确认生成颜色提示块"
+            4. 查看条件图 → 检查生成的条件图是否正确
+            5. 确认无误后 → 点击"✅ 确认颜色提示"
             6. 检查文件 → 点击"📥 下载条件图PNG"查看实际输入文件
             7. 生成完成后 → 点击"🔄 重新编辑"重新编辑
             8. 观察状态栏 → ✅表示已确认，⏳表示未确认
@@ -1082,15 +1077,14 @@ def create_ui():
         
         # 编辑区域变化监控 - 简化版本
         def check_sketch_and_network(sketch_data):
-            """检查编辑变化和网络状态"""
+            """检查编辑变化并返回主状态字符串"""
             sketch_status = check_sketch_changes(sketch_data)
-            network_msg = "🟢 正常"
-            return sketch_status, network_msg
-        
+            return sketch_status
+
         sketch_pad.change(
             fn=check_sketch_and_network,
             inputs=sketch_pad,
-            outputs=[edit_status, network_status],
+            outputs=[status_text],
             show_progress="hidden"
         )
         
@@ -1103,38 +1097,29 @@ def create_ui():
             current_edit_data = None
             current_color_data = None
             result = update_sketch_pad(base_img)
-            return result, result, "🔄 已重置为原图，请重新编辑", "⏳ 等待编辑完成", "⏳ 等待编辑完成", None, "", "🟢 状态已重置"
-        
+            # 返回：sketch_pad, color_pad, status_text, condition_preview
+            return result, result, "🔄 已重置为原图，请重新编辑", None
+
         clear_btn.click(
             fn=reset_and_update_status,
             inputs=base_image,
-            outputs=[sketch_pad, color_pad, status_text, edit_status, color_status, condition_image, condition_path_text, network_status],
+            outputs=[sketch_pad, color_pad, status_text, condition_preview],
             show_progress="hidden"
         )
         
         
-        # 状态查询按钮
-        status_btn.click(
-            fn=get_current_status,
-            inputs=None,
-            outputs=[status_text, edit_status, color_status, network_status],
-            show_progress="hidden"
-        )
+        # 状态查询按钮已移除; 使用主状态框 `status_text` 显示状态
         
         # 确认编辑按钮 - 简化版本
         def confirm_and_update_status_with_retry(base_img, sketch_data):
-            """确认编辑并同步状态"""
+            """确认编辑并同步状态（简化返回）"""
             import time
             start_time = time.time()
-            
+
             # 执行确认操作
             main_status, masked_image = confirm_edit_ready(base_img, sketch_data)
-            
+
             if "✅" in main_status:
-                edit_status_msg = "✅ 编辑已确认，请添加颜色提示"
-                color_status_msg = "⏳ 请添加颜色提示并确认"
-                network_msg = "🟢 确认成功"
-                
                 # 更新颜色编辑器
                 if masked_image is not None:
                     if isinstance(masked_image, Image.Image):
@@ -1147,91 +1132,52 @@ def create_ui():
                     else:
                         color_pad_image = np.ones((1024, 1024, 3), dtype=np.uint8) * 255
             else:
-                edit_status_msg = "❌ 编辑确认失败，请重试"
-                color_status_msg = "⏳ 等待编辑确认"
                 color_pad_image = np.ones((1024, 1024, 3), dtype=np.uint8) * 255
-                network_msg = "� 确认失败"
-            
+
             response_time = time.time() - start_time
             print(f"⏱️ 确认响应: {response_time:.2f}秒, 状态: {'成功' if '✅' in main_status else '失败'}")
-            
-            return main_status, edit_status_msg, color_status_msg, network_msg, color_pad_image
-        
+
+            return main_status, color_pad_image
+
         confirm_btn.click(
             fn=confirm_and_update_status_with_retry,
             inputs=[base_image, sketch_pad],
-            outputs=[status_text, edit_status, color_status, network_status, color_pad],
+            outputs=[status_text, color_pad],
             show_progress="minimal"
         )
         
-        # 生成颜色提示块按钮 - 简化版本
-        def generate_color_and_update_status(color_stroke_data):
-            """生成颜色提示块并更新状态"""
+        # 生成颜色提示块按钮 - 使用slider值
+        def generate_color_and_update_status(color_stroke_data, n_points_value):
+            """生成颜色提示块并自动确认颜色（但不触发生成）"""
+            global N_POINTS
             import time
             start_time = time.time()
-            
-            main_status, condition_img, png_path = generate_color_hints_from_strokes(color_stroke_data)
-            
-            if "✅" in main_status or "⚠️" in main_status:
-                color_status_msg = "⏳ 请检查条件图并点击确认"
-                network_msg = " 生成成功"
-            else:
-                color_status_msg = "❌ 颜色提示生成失败，请重试"
-                condition_img = None
-                png_path = ""
-                network_msg = "� 生成失败"
-            
+
+            # 更新全局N_POINTS变量
+            N_POINTS = int(n_points_value)
+            print(f"🎯 使用颜色提示块数量: {N_POINTS}")
+
+            # 生成颜色条件图并自动确认（内存中）
+            color_msg, condition_img = generate_color_hints_from_strokes(color_stroke_data)
             response_time = time.time() - start_time
             print(f"⏱️ 颜色生成响应: {response_time:.2f}秒")
-            
-            return main_status, color_status_msg, network_msg, condition_img, png_path if png_path else ""
-        
-        generate_color_btn.click(
+
+            # 返回：主状态（仅返回状态，条件图保存在内存current_color_data）
+            # 返回状态文本和条件图以更新预览（条件图可能为None）
+            return color_msg, condition_img
+
+        confirm_generate_color_btn.click(
             fn=generate_color_and_update_status,
-            inputs=[color_pad],
-            outputs=[status_text, color_status, network_status, condition_image, condition_path_text],
+            inputs=[color_pad, n_points_slider],
+            outputs=[status_text, condition_preview],
             show_progress="minimal"
         )
         
         # 确认颜色提示按钮 - 简化版本
-        def confirm_color_and_update_status():
-            """确认颜色提示并更新状态"""
-            main_status, condition_img = confirm_color_hints_ready()
-            
-            if "✅" in main_status:
-                color_status_msg = "✅ 颜色已确认，可以生成图像"
-                network_msg = "🟢 确认成功"
-            else:
-                color_status_msg = "❌ 颜色确认失败，请重试"
-                network_msg = " 确认失败"
-            
-            return main_status, color_status_msg, network_msg
-        
-        confirm_color_btn.click(
-            fn=confirm_color_and_update_status,
-            inputs=None,
-            outputs=[status_text, color_status, network_status],
-            show_progress="minimal"
-        )
+        # 确认颜色提示按钮已移除; 颜色将在生成颜色提示块时自动确认
         
         # 下载条件图按钮
-        def download_condition_image():
-            """下载条件图PNG文件"""
-            if current_color_data and 'condition_png_path' in current_color_data:
-                png_path = current_color_data['condition_png_path']
-                if os.path.exists(png_path):
-                    return png_path, f"✅ 条件图PNG文件: {png_path}"
-                else:
-                    return None, f"❌ 条件图文件不存在: {png_path}"
-            else:
-                return None, "❌ 没有可下载的条件图，请先确认颜色提示"
-        
-        download_condition_btn.click(
-            fn=download_condition_image,
-            inputs=None,
-            outputs=[condition_file, status_text],
-            show_progress="minimal"
-        )
+        # 条件图PNG下载功能已移除（使用内存中的条件图）
         
         # 生成按钮 - 增强状态反馈和同步
         def safe_generate_image_with_status(prompt_text, num_steps, guidance_scale):
@@ -1243,34 +1189,26 @@ def create_ui():
             try:
                 if not edit_confirmed:
                     error_msg = "❌ 请先点击'确认编辑完成'按钮"
-                    return None, None, error_msg, "❌ 未确认编辑，无法生成", "❌ 编辑未确认"
-                
+                    return None, None, error_msg
+
                 if not color_confirmed:
-                    error_msg = "❌ 请先点击'确认颜色提示'按钮"
-                    return None, None, error_msg, "✅ 编辑已确认", "❌ 颜色未确认，无法生成"
-                
+                    error_msg = "❌ 请先生成颜色提示块（颜色将在生成时自动确认）"
+                    return None, None, error_msg
+
                 print(f"⏳ [{timestamp}] 开始生成图像...")
                 result_img, comparison_img, main_status = generate_image(prompt_text, num_steps, guidance_scale)
-                
-                # 生成完成后的状态
-                if result_img is not None:
-                    edit_status_msg = "🎉 生成完成！"
-                    color_status_msg = "🎉 生成完成！"
-                else:
-                    edit_status_msg = "❌ 生成失败，请检查数据"
-                    color_status_msg = "❌ 生成失败"
-                
-                return result_img, comparison_img, main_status, edit_status_msg, color_status_msg
-                
+
+                return result_img, comparison_img, main_status
+
             except Exception as e:
                 error_msg = f"❌ 生成过程出错: {str(e)}"
                 print(f"❌ [{timestamp}] {error_msg}")
-                return None, None, error_msg, "❌ 生成过程异常", "❌ 生成过程异常"
+                return None, None, error_msg
         
         generate_event = generate_btn.click(
             fn=safe_generate_image_with_status,
             inputs=[prompt, num_steps, guidance_scale],
-            outputs=[output_image, comparison_image, status_text, edit_status, color_status],
+            outputs=[output_image, comparison_image, status_text],
             show_progress=True,
             scroll_to_output=True,
         )
@@ -1278,22 +1216,26 @@ def create_ui():
         # 继续编辑按钮 - 重置状态并返回编辑模式
         def continue_editing_wrapper(base_img):
             """继续编辑的包装函数，确保返回值顺序正确"""
-            sketch_pad_result, main_status, edit_status_msg, color_status_msg, network_msg, color_pad_result, cond_img, cond_path = continue_editing(base_img)
-            # 返回顺序必须与outputs一致
-            return sketch_pad_result, main_status, edit_status_msg, color_status_msg, network_msg, color_pad_result, cond_img, cond_path
-        
+            sketch_pad_result, main_status, _, _, _, color_pad_result, _, _ = continue_editing(base_img)
+            # 返回：sketch_pad, status_text, color_pad, condition_preview(清空)
+            return sketch_pad_result, main_status, color_pad_result, None
+
         continue_edit_btn.click(
             fn=continue_editing_wrapper,
             inputs=base_image,
-            outputs=[sketch_pad, status_text, edit_status, color_status, network_status, color_pad, condition_image, condition_path_text],
+            outputs=[sketch_pad, status_text, color_pad, condition_preview],
             show_progress="hidden"
         )
         
-        # 页面加载时初始化状态
+        # 页面加载时初始化主状态文本
+        def load_status_wrapper():
+            main_status, *_ = get_current_status()
+            return main_status
+
         demo.load(
-            fn=get_current_status,
+            fn=load_status_wrapper,
             inputs=None,
-            outputs=[status_text, edit_status, color_status, network_status],
+            outputs=[status_text],
             show_progress="hidden"
         )
     
