@@ -1,11 +1,10 @@
-# MagicOmini
+# MagicOmini: A Magic Demo for You to Enjoy Local Sketch Editing
 
 <div align="center">
   <img src='./readme_assets/gif_assets/ex1.gif' width='49%' />
   <img src='./readme_assets/gif_assets/ex2.gif' width='49%' />
 </div>
 <br>
-
 
 
 > **MagicOmini: Efficient Local Sketch Editing for Diffusion Transformers**
@@ -34,7 +33,10 @@ pip install -r requirements.txt
 ```
 
 3. **Checkpoints**
-Coming soon
+
+Click [here](https://huggingface.co/wangqiqi12/SketchOmini) and download the checkpoint. Remember to change the checkpoint to your path in gradio code.
+
+
 
 
 ## Visual Result
